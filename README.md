@@ -1,16 +1,2 @@
-# pretty_threads
-
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# Pretty-Treads
+Pretty-Treads is a platform to discover and showcase the latest fashion trends with style. From streetwear to haute couture, it captures the most popular “treads” and presents them in a visually appealing format.
