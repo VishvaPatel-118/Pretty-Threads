@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pretty_threads/user/authentication/login_screen.dart';
+import 'drawer_menu.dart'; // ✅ Make sure the path is correct
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,101 +16,97 @@ class _HomePageState extends State<HomePage>
   int? _hoveredCategoryIndex;
   bool _isImageTapped = false;
 
+  // ✅ Category Data
   final List<Map<String, String>> categories = [
-    {
-      "name": "Lahenga Choli",
-      "image": "assets/images/Lahengacholi.jpeg"
-    },
-    {
-      "name": "Bridal Choli",
-      "image": "assets/images/bridalcholi.jpeg"
-    },
-    {
-      "name": "Navratri Choli",
-      "image": "assets/images/navratricholi.jpeg"
-    },
-    {
-      "name": "Kurti",
-      "image": "assets/images/kurti.jpeg"
-    },
+    {"name": "Men", "image": "assets/images/mensuits.webp"},
+    {"name": "Women", "image": "assets/images/kurti.jpeg"},
+    {"name": "Kids", "image": "assets/images/pinkgown.jpg"},
   ];
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    if (index == 3) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    } else {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5F5),
+
+      drawer: const DrawerMenu(),
+
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "Welcome Customer",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF6A1B9A),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Search bar
+              // ✅ Top Row
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.purple.withOpacity(0.1),
-                            blurRadius: 6,
-                          )
-                        ],
-                      ),
-                      child: const TextField(
-                        decoration: InputDecoration(
-                          hintText: "Search...",
-                          prefixIcon: Icon(Icons.search, color: Colors.grey),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
+                  Builder(
+                    builder: (context) => IconButton(
+                      icon: const Icon(Icons.menu, color: Color(0xFF6A1B9A)),
+                      onPressed: () {
+                        Scaffold.of(context).openDrawer();
+                      },
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const LoginScreen(), // apka login page
-                        ),
-                      );
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: const Icon(Icons.person, color: Colors.grey),
+                  const Text(
+                    "Welcome Customer",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6A1B9A),
                     ),
                   ),
-
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    child: const Icon(Icons.notifications, color: Colors.grey),
+                  ),
                 ],
               ),
+
+              const SizedBox(height: 16),
+
+              // ✅ Search Bar
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.purple.withOpacity(0.1),
+                      blurRadius: 6,
+                    )
+                  ],
+                ),
+                child: const TextField(
+                  decoration: InputDecoration(
+                    hintText: "Search...",
+                    prefixIcon: Icon(Icons.search, color: Colors.grey),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+
               const SizedBox(height: 20),
 
-              // Premium Categories
+              // ✅ Categories Row
               SizedBox(
                 height: 110,
                 child: ListView.builder(
@@ -152,8 +149,9 @@ class _HomePageState extends State<HomePage>
                               duration: const Duration(milliseconds: 200),
                               child: CircleAvatar(
                                 radius: 30,
-                                backgroundImage:
-                                AssetImage(categories[index]["image"]!),
+                                backgroundImage: AssetImage(
+                                  categories[index]["image"]!,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -174,9 +172,10 @@ class _HomePageState extends State<HomePage>
                   },
                 ),
               ),
+
               const SizedBox(height: 20),
 
-              // New Arrivals with zoom animation
+              // ✅ New Arrivals Section
               GestureDetector(
                 onTapDown: (_) {
                   setState(() {
@@ -213,15 +212,16 @@ class _HomePageState extends State<HomePage>
                     children: [
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding:
+                          const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
-                            " New Arrivals ",
+                            "New Arrivals",
                             style: GoogleFonts.dancingScript(
                               fontSize: 30,
                               fontWeight: FontWeight.bold,
                               color: const Color(0xFF6A1B9A),
-                              shadows: [
-                                const Shadow(
+                              shadows: const [
+                                Shadow(
                                   blurRadius: 8,
                                   color: Colors.purpleAccent,
                                   offset: Offset(1, 1),
@@ -240,7 +240,7 @@ class _HomePageState extends State<HomePage>
                           scale: _isImageTapped ? 1.1 : 1.0,
                           duration: const Duration(milliseconds: 150),
                           child: Image.asset(
-                            categories[3]["image"]!,
+                            categories[0]["image"]!,
                             width: 160,
                             height: 120,
                             fit: BoxFit.cover,
@@ -251,6 +251,7 @@ class _HomePageState extends State<HomePage>
                   ),
                 ),
               ),
+
               const SizedBox(height: 20),
 
               Center(
@@ -267,6 +268,7 @@ class _HomePageState extends State<HomePage>
         ),
       ),
 
+      // ✅ Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
@@ -288,8 +290,8 @@ class _HomePageState extends State<HomePage>
             label: "Cart",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: "Settings",
+            icon: Icon(Icons.account_circle),
+            label: "Account",
           ),
         ],
       ),
