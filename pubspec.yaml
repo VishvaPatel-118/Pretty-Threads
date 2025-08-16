@@ -74,6 +74,21 @@ flutter:
     - assets/images/kurti.jpeg
     - assets/images/mensuits.webp
     - assets/images/pinkgown.jpg
+    - assets/images/categories/blue jodhpuri.webp
+    - assets/images/categories/cotton sari.webp
+    - assets/images/categories/green navratri choli.webp
+    - assets/images/categories/jodhpuri.webp
+    - assets/images/categories/kids casual.webp
+    - assets/images/categories/kids festival.webp
+    - assets/images/categories/kids party.webp
+    - assets/images/categories/navratrikurta.webp
+    - assets/images/categories/sari.webp
+    - assets/images/categories/slim fit suit.webp
+    - assets/images/categories/suit.webp
+    - assets/images/categories/white navratri kurta.webp
+    - assets/images/categories/pinkcholi 1.jpeg
+    - assets/images/categories/pinkcholi 2.jpeg
+    - assets/images/categories/pinkcholi 3.jpeg
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

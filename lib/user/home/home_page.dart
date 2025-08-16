@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pretty_threads/user/authentication/login_screen.dart';
-import 'drawer_menu.dart'; // ✅ Make sure the path is correct
+import 'drawer_menu.dart';
+
+import 'package:pretty_threads/user/home/categories_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,7 +18,7 @@ class _HomePageState extends State<HomePage>
   int? _hoveredCategoryIndex;
   bool _isImageTapped = false;
 
-  // ✅ Category Data
+  // ✅ Category Data (Only for showing images + names)
   final List<Map<String, String>> categories = [
     {"name": "Men", "image": "assets/images/mensuits.webp"},
     {"name": "Women", "image": "assets/images/kurti.jpeg"},
@@ -106,7 +108,7 @@ class _HomePageState extends State<HomePage>
 
               const SizedBox(height: 20),
 
-              // ✅ Categories Row
+              // ✅ Categories Row (Men / Women / Kids → open CategoriesPage)
               SizedBox(
                 height: 110,
                 child: ListView.builder(
@@ -114,58 +116,71 @@ class _HomePageState extends State<HomePage>
                   itemCount: categories.length,
                   itemBuilder: (context, index) {
                     bool isHovered = _hoveredCategoryIndex == index;
-                    return MouseRegion(
-                      onEnter: (_) {
-                        setState(() {
-                          _hoveredCategoryIndex = index;
-                        });
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CategoriesPage(
+                              category: categories[index]["name"]!, // "Men" / "Women" / "Kids"
+                            ),
+                          ),
+                        );
                       },
-                      onExit: (_) {
-                        setState(() {
-                          _hoveredCategoryIndex = null;
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.only(right: 16.0),
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: isHovered
-                              ? [
-                            BoxShadow(
-                              color: Colors.purple.withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            )
-                          ]
-                              : [],
-                        ),
-                        child: Column(
-                          children: [
-                            AnimatedScale(
-                              scale: isHovered ? 1.1 : 1.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: CircleAvatar(
-                                radius: 30,
-                                backgroundImage: AssetImage(
-                                  categories[index]["image"]!,
+
+                      child: MouseRegion(
+                        onEnter: (_) {
+                          setState(() {
+                            _hoveredCategoryIndex = index;
+                          });
+                        },
+                        onExit: (_) {
+                          setState(() {
+                            _hoveredCategoryIndex = null;
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.only(right: 16.0),
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: isHovered
+                                ? [
+                              BoxShadow(
+                                color: Colors.purple.withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              )
+                            ]
+                                : [],
+                          ),
+                          child: Column(
+                            children: [
+                              AnimatedScale(
+                                scale: isHovered ? 1.1 : 1.0,
+                                duration: const Duration(milliseconds: 200),
+                                child: CircleAvatar(
+                                  radius: 30,
+                                  backgroundImage: AssetImage(
+                                    categories[index]["image"]!,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            SizedBox(
-                              width: 70,
-                              child: Text(
-                                categories[index]["name"]!,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: 70,
+                                child: Text(
+                                  categories[index]["name"]!,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -212,8 +227,7 @@ class _HomePageState extends State<HomePage>
                     children: [
                       Expanded(
                         child: Padding(
-                          padding:
-                          const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
                             "New Arrivals",
                             style: GoogleFonts.dancingScript(
