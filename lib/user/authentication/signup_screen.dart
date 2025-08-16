@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:pretty_threads/services/api.dart';
+import 'package:pretty_threads/user/home/home_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -16,6 +19,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _addressController = TextEditingController();
   final _cityController = TextEditingController();
   final _pincodeController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -199,21 +203,118 @@ class _SignupScreenState extends State<SignupScreen> {
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            onPressed: () {},
+                            onPressed: _isLoading
+                                ? null
+                                : () async {
+                                    final name = _nameController.text.trim();
+                                    final email = _emailController.text.trim();
+                                    final phone = _phoneController.text.trim();
+                                    final password = _passwordController.text;
+                                    final confirmPassword = _confirmPasswordController.text;
+                                    final address = _addressController.text.trim();
+                                    final city = _cityController.text.trim();
+                                    final pincode = _pincodeController.text.trim();
+
+                                    // Basic validation (match backend required fields)
+                                    if (name.isEmpty ||
+                                        email.isEmpty ||
+                                        phone.isEmpty ||
+                                        password.isEmpty ||
+                                        confirmPassword.isEmpty ||
+                                        address.isEmpty ||
+                                        city.isEmpty ||
+                                        pincode.isEmpty) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                            content: Text('Please fill in all required fields')),
+                                      );
+                                      return;
+                                    }
+
+                                    if (password != confirmPassword) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                            content: Text('Passwords do not match')),
+                                      );
+                                      return;
+                                    }
+
+                                    setState(() {
+                                      _isLoading = true;
+                                    });
+
+                                    try {
+                                      // Register the user
+                                      await ApiService.register(
+                                        fullName: name,
+                                        email: email,
+                                        password: password,
+                                        phoneNumber: phone,
+                                        fullAddress: address,
+                                        city: city,
+                                        pincode: pincode,
+                                      );
+
+                                      if (!mounted) return;
+
+                                      // Auto-login after successful registration
+                                      final loginResp = await ApiService.login(
+                                        email: email,
+                                        password: password,
+                                      );
+
+                                      if (!mounted) return;
+                                      // Save token and navigate to Home
+                                      final prefs = await SharedPreferences.getInstance();
+                                      await prefs.setString('auth_token', loginResp['token']);
+
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Sign up successful! Logged in.')),
+                                      );
+                                      await Future.delayed(const Duration(milliseconds: 400));
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => const HomePage()),
+                                      );
+                                    } catch (e) {
+                                      if (!mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                            content: Text(
+                                                e.toString().replaceFirst('Exception: ', ''))),
+                                      );
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() {
+                                          _isLoading = false;
+                                        });
+                                      }
+                                    }
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.purple,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
+                              disabledBackgroundColor: Colors.purple.withOpacity(0.7),
                             ),
-                            child: const Text(
-                              "Sign Up",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text(
+                                    "Sign Up",
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
                         ),
                         const SizedBox(height: 20),
