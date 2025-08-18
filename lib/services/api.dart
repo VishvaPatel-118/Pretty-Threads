@@ -1,8 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = 'https://129fe27032d1.ngrok-free.app';
+  // Configurable at build time: flutter build apk/appbundle --dart-define=API_BASE_URL=https://your-domain
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://dff277d6b695.ngrok-free.app',
+  );
 
   static Map<String, String> get _headers => {
     'Content-Type': 'application/json',
@@ -81,7 +86,7 @@ class ApiService {
     }
 
     final message = _extractErrorMessage(data) ?? 'Login failed (${resp.statusCode})';
-    throw Exception(message);
+    throw ApiException(message: message, statusCode: resp.statusCode);
   }
 
   static dynamic _parseJson(http.Response resp) {
@@ -124,6 +129,14 @@ class ApiService {
       if (topMessage != null && topMessage.isNotEmpty) return topMessage;
     }
     return null;
+  }
+
+  // Normalize image URLs: if Laravel returns "/storage/...", prefix with baseUrl
+  static String normalizeImageUrl(String? url) {
+    if (url == null || url.isEmpty) return '';
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/')) return '$baseUrl$url';
+    return url; // asset or other path
   }
 
   // ===== Protected endpoints (Profile) =====
@@ -191,4 +204,379 @@ class ApiService {
     final data = _parseJson(resp);
     throw Exception(_extractErrorMessage(data) ?? 'Failed to change password (${resp.statusCode})');
   }
+
+  // Delete account
+  static Future<String> deleteAccount({required String token}) async {
+    final uri = Uri.parse('$baseUrl/api/user');
+    final resp = await http
+        .delete(
+          uri,
+          headers: _authHeaders(token),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (resp.statusCode == 204) return 'Account deleted successfully';
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200) {
+      final msg = (data is Map && data['message'] is String) ? data['message'] as String : 'Account deleted successfully';
+      return msg;
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to delete account (${resp.statusCode})');
+  }
+
+  // Logout
+  static Future<String> logout({required String token}) async {
+    final uri = Uri.parse('$baseUrl/api/auth/logout');
+    final resp = await http
+        .post(
+          uri,
+          headers: _authHeaders(token),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200) {
+      final msg = (data is Map && data['message'] is String) ? data['message'] as String : 'Logged out successfully';
+      return msg;
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to logout (${resp.statusCode})');
+  }
+
+  // ===== Public catalog endpoints =====
+  // Fetch categories (optionally only roots and with children)
+  static Future<List<dynamic>> getCategories({bool onlyRoots = true, bool withChildren = true}) async {
+    final params = <String, String>{
+      'only': onlyRoots ? 'roots' : 'all',
+      'with': withChildren ? 'subcategories' : 'none',
+    };
+    final uri = Uri.parse('$baseUrl/api/categories').replace(queryParameters: params);
+
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) {
+      return (data['data'] as List<dynamic>? ?? <dynamic>[]);
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch categories (${resp.statusCode})');
+  }
+
+  // Fetch a single category by slug (with its children)
+  static Future<Map<String, dynamic>> getCategoryBySlug(String slug) async {
+    final uri = Uri.parse('$baseUrl/api/categories/$slug');
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) {
+      return (data['data'] as Map<String, dynamic>? ?? <String, dynamic>{});
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch category (${resp.statusCode})');
+  }
+
+  // Fetch products, optionally filtered by category slug. Returns Laravel paginator map.
+  static Future<Map<String, dynamic>> getProducts({String? categorySlug, int page = 1, int perPage = 20}) async {
+    final qp = <String, String>{
+      'page': page.toString(),
+      'per_page': perPage.toString(),
+      if (categorySlug != null && categorySlug.isNotEmpty) 'category_slug': categorySlug,
+    };
+    final uri = Uri.parse('$baseUrl/api/products').replace(queryParameters: qp);
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) {
+      return (data['data'] as Map<String, dynamic>? ?? <String, dynamic>{});
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch products (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> getProductBySlug(String slug) async {
+    final uri = Uri.parse('$baseUrl/api/products/$slug');
+    final resp = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) {
+      return (data['data'] as Map<String, dynamic>? ?? <String, dynamic>{});
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch product (${resp.statusCode})');
+  }
+
+  // ===== Admin/Product media (protected) =====
+  static Future<String> uploadProductImage({
+    required String token,
+    required int productId,
+    required File file,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/products/$productId/image');
+    final req = http.MultipartRequest('POST', uri);
+    req.headers.addAll(_authHeaders(token));
+    req.files.add(await http.MultipartFile.fromPath('image', file.path));
+
+    final streamed = await req.send().timeout(const Duration(seconds: 30));
+    final resp = await http.Response.fromStream(streamed);
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map && data['data'] is Map) {
+      final img = (data['data'] as Map)['image_url']?.toString() ?? '';
+      return img;
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to upload image (${resp.statusCode})');
+  }
+
+  // ===== Admin: Users =====
+  // NOTE: Routes assume Laravel-style admin prefix: /api/admin/...
+  // Adjust paths if your backend differs.
+  static Future<Map<String, dynamic>> adminListUsers({
+    required String token,
+    int page = 1,
+    int perPage = 20,
+    String? search,
+  }) async {
+    final qp = <String, String>{
+      'page': page.toString(),
+      'per_page': perPage.toString(),
+      if (search != null && search.isNotEmpty) 'search': search,
+    };
+    final uri = Uri.parse('$baseUrl/api/admin/users').replace(queryParameters: qp);
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) {
+      return data;
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch users (${resp.statusCode})');
+  }
+
+  static Future<void> adminBlockUser({required String token, required int userId}) async {
+    final uri = Uri.parse('$baseUrl/api/admin/users/$userId/block');
+    final resp = await http.post(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to block user (${resp.statusCode})');
+  }
+
+  static Future<void> adminUnblockUser({required String token, required int userId}) async {
+    final uri = Uri.parse('$baseUrl/api/admin/users/$userId/unblock');
+    final resp = await http.post(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to unblock user (${resp.statusCode})');
+  }
+
+  // ===== Admin: Products CRUD =====
+  static Future<Map<String, dynamic>> adminListProducts({
+    required String token,
+    int page = 1,
+    int perPage = 20,
+    String? search,
+    int? categoryId,
+  }) async {
+    final qp = <String, String>{
+      'page': page.toString(),
+      'per_page': perPage.toString(),
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (categoryId != null) 'category_id': categoryId.toString(),
+    };
+    final uri = Uri.parse('$baseUrl/api/admin/products').replace(queryParameters: qp);
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch products (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminCreateProduct({
+    required String token,
+    required String name,
+    required double price,
+    required int stock,
+    required int categoryId,
+    String? description,
+    Map<String, dynamic>? extra,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/admin/products');
+    final payload = <String, dynamic>{
+      'name': name,
+      'price': price,
+      'stock': stock,
+      'category_id': categoryId,
+      if (description != null) 'description': description,
+      if (extra != null) ...extra,
+    };
+    final resp = await http
+        .post(uri, headers: _authHeaders(token), body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 201 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to create product (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminUpdateProduct({
+    required String token,
+    required int productId,
+    String? name,
+    double? price,
+    int? stock,
+    int? categoryId,
+    String? description,
+    Map<String, dynamic>? extra,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/admin/products/$productId');
+    final payload = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (price != null) 'price': price,
+      if (stock != null) 'stock': stock,
+      if (categoryId != null) 'category_id': categoryId,
+      if (description != null) 'description': description,
+      if (extra != null) ...extra,
+    };
+    final resp = await http
+        .put(uri, headers: _authHeaders(token), body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to update product (${resp.statusCode})');
+  }
+
+  static Future<void> adminDeleteProduct({required String token, required int productId}) async {
+    final uri = Uri.parse('$baseUrl/api/admin/products/$productId');
+    final resp = await http.delete(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to delete product (${resp.statusCode})');
+  }
+
+  // ===== Admin: Categories CRUD (with parent/child) =====
+  static Future<Map<String, dynamic>> adminListCategories({
+    required String token,
+    bool withChildren = true,
+  }) async {
+    final qp = <String, String>{
+      if (withChildren) 'with': 'children',
+    };
+    final uri = Uri.parse('$baseUrl/api/admin/categories').replace(queryParameters: qp);
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch categories (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminCreateCategory({
+    required String token,
+    required String name,
+    int? parentId,
+    String? description,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/admin/categories');
+    final payload = <String, dynamic>{
+      'name': name,
+      if (parentId != null) 'parent_id': parentId,
+      if (description != null) 'description': description,
+    };
+    final resp = await http
+        .post(uri, headers: _authHeaders(token), body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 201 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to create category (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminUpdateCategory({
+    required String token,
+    required int categoryId,
+    String? name,
+    int? parentId,
+    String? description,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/admin/categories/$categoryId');
+    final payload = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (parentId != null) 'parent_id': parentId,
+      if (description != null) 'description': description,
+    };
+    final resp = await http
+        .put(uri, headers: _authHeaders(token), body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to update category (${resp.statusCode})');
+  }
+
+  static Future<void> adminDeleteCategory({required String token, required int categoryId}) async {
+    final uri = Uri.parse('$baseUrl/api/admin/categories/$categoryId');
+    final resp = await http.delete(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to delete category (${resp.statusCode})');
+  }
+
+  // ===== Admin: Payments (start CRUD) =====
+  static Future<Map<String, dynamic>> adminListPayments({
+    required String token,
+    int page = 1,
+    int perPage = 20,
+    String? status,
+    int? userId,
+  }) async {
+    final qp = <String, String>{
+      'page': page.toString(),
+      'per_page': perPage.toString(),
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (userId != null) 'user_id': userId.toString(),
+    };
+    final uri = Uri.parse('$baseUrl/api/admin/payments').replace(queryParameters: qp);
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch payments (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminGetPayment({required String token, required int paymentId}) async {
+    final uri = Uri.parse('$baseUrl/api/admin/payments/$paymentId');
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch payment (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminUpdatePaymentStatus({
+    required String token,
+    required int paymentId,
+    required String status, // e.g., pending, paid, failed, refunded
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/admin/payments/$paymentId/status');
+    final resp = await http
+        .put(
+          uri,
+          headers: _authHeaders(token),
+          body: jsonEncode({'status': status}),
+        )
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to update payment (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminRefundPayment({
+    required String token,
+    required int paymentId,
+    double? amount,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/admin/payments/$paymentId/refund');
+    final payload = <String, dynamic>{
+      if (amount != null) 'amount': amount,
+    };
+    final resp = await http
+        .post(
+          uri,
+          headers: _authHeaders(token),
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to refund payment (${resp.statusCode})');
+  }
+}
+
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  ApiException({required this.message, this.statusCode});
+
+  @override
+  String toString() => 'ApiException($statusCode): $message';
 }

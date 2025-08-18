@@ -4,6 +4,8 @@ import 'package:pretty_threads/user/authentication/forgot_password_screen.dart';
 import 'package:pretty_threads/user/home/home_page.dart';
 import 'package:pretty_threads/services/api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pretty_threads/services/auth.dart';
+import 'package:pretty_threads/admin/dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -185,28 +187,60 @@ class _LoginScreenState extends State<LoginScreen> {
 
                                           if (!mounted) return;
 
-                                          // Save token to shared preferences
+                                          // Save token via AuthService (and keep existing SharedPreferences fallback)
+                                          final token = (response['token'] ?? '').toString();
                                           final prefs = await SharedPreferences.getInstance();
-                                          await prefs.setString('auth_token', response['token']);
+                                          await prefs.setString('auth_token', token);
+                                          await AuthService().saveToken(token);
 
-                                          // Show success then navigate to home
+                                          // Load profile to determine role
+                                          await AuthService().loadProfile();
+
+                                          // Show success then navigate to dashboard/home
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             const SnackBar(content: Text('Logged in successfully')),
                                           );
                                           await Future.delayed(const Duration(milliseconds: 400));
-                                          Navigator.pushReplacement(
-                                            context,
-                                            MaterialPageRoute(
-                                                builder: (context) => const HomePage()),
-                                          );
+                                          final auth = AuthService();
+                                          if (auth.isAdmin) {
+                                            Navigator.pushReplacement(
+                                              context,
+                                              MaterialPageRoute(builder: (context) => const AdminDashboard()),
+                                            );
+                                          } else {
+                                            Navigator.pushReplacement(
+                                              context,
+                                              MaterialPageRoute(builder: (context) => const HomePage()),
+                                            );
+                                          }
                                         } catch (e) {
                                           if (!mounted) return;
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                                content: Text(e
-                                                    .toString()
-                                                    .replaceFirst('Exception: ', ''))),
-                                          );
+                                          if (e is ApiException && e.statusCode == 404) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(e.message),
+                                                action: SnackBarAction(
+                                                  label: 'Sign Up',
+                                                  onPressed: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => const SignupScreen(),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  e.toString().replaceFirst('Exception: ', ''),
+                                                ),
+                                              ),
+                                            );
+                                          }
                                         } finally {
                                           if (mounted) {
                                             setState(() {
@@ -265,40 +299,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ],
                             ),
-                            const Text(
-                              "OR",
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black54,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            GestureDetector(
-                              onTap: () {
-                                // Admin login navigation
-                              },
-                              child: RichText(
-                                text: const TextSpan(
-                                  text: "Are you an admin? ",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black54,
-                                    fontSize: 14,
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: "Click here",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.purple,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            // Admin link removed intentionally: admins use normal login, then routing depends on user.is_admin
                           ],
                         ),
                       ),

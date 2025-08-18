@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:pretty_threads/services/api.dart';
+import 'package:pretty_threads/services/cart.dart';
 
 class ProductDetailsPage extends StatefulWidget {
+  final String slug;
   final String name;
-  final String price;
+  final double price;
   final String description;
   final List<String> images;
 
   const ProductDetailsPage({
     super.key,
+    required this.slug,
     required this.name,
     required this.price,
     required this.description,
@@ -19,12 +23,13 @@ class ProductDetailsPage extends StatefulWidget {
 }
 
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
-  late String mainImage;
+  String? mainImage;
+  int quantity = 1;
 
   @override
   void initState() {
     super.initState();
-    mainImage = widget.images[0]; // Default first image
+    mainImage = widget.images.isNotEmpty ? widget.images[0] : null; // Default first image if available
   }
 
   @override
@@ -40,12 +45,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             // Main image
             Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Image.asset(
-                mainImage,
-                height: 300,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
+              child: _buildMainImage(),
             ),
             // Horizontal scrollable thumbnails
             SizedBox(
@@ -71,12 +71,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                         ),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Image.asset(
-                        widget.images[index],
-                        width: 70,
-                        height: 70,
-                        fit: BoxFit.cover,
-                      ),
+                      child: _buildImage(widget.images[index], width: 70, height: 70),
                     ),
                   );
                 },
@@ -93,7 +88,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       style:
                       const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  Text(widget.price,
+                  Text('₹ ${widget.price.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 20, color: Colors.green)),
                   const SizedBox(height: 16),
                   Text(widget.description, style: const TextStyle(fontSize: 16)),
@@ -102,6 +97,87 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: _buildAddToCartBar(context),
+    );
+  }
+
+  Widget _buildMainImage() {
+    if (mainImage == null || mainImage!.isEmpty) {
+      return Container(
+        height: 300,
+        width: double.infinity,
+        color: Colors.grey[200],
+        alignment: Alignment.center,
+        child: const Icon(Icons.image, size: 64, color: Colors.grey),
+      );
+    }
+    return _buildImage(mainImage!, height: 300, width: double.infinity);
+  }
+
+  Widget _buildImage(String path, {double? width, double? height}) {
+    final normalized = ApiService.normalizeImageUrl(path);
+    final isAsset = normalized.startsWith('assets/');
+    final imageWidget = isAsset
+        ? Image.asset(normalized, fit: BoxFit.cover, width: width, height: height)
+        : Image.network(normalized, fit: BoxFit.cover, width: width, height: height);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: imageWidget,
+    );
+  }
+
+  Widget _buildAddToCartBar(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+      ),
+      child: Row(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: () {
+                  setState(() => quantity = (quantity - 1).clamp(1, 999));
+                },
+                icon: const Icon(Icons.remove_circle_outline),
+              ),
+              Text(quantity.toString(), style: const TextStyle(fontSize: 16)),
+              IconButton(
+                onPressed: () {
+                  setState(() => quantity = (quantity + 1).clamp(1, 999));
+                },
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () async {
+                final cart = CartService();
+                final img = mainImage != null && mainImage!.isNotEmpty
+                    ? ApiService.normalizeImageUrl(mainImage!)
+                    : '';
+                await cart.addItem(
+                  slug: widget.slug,
+                  name: widget.name,
+                  price: widget.price,
+                  imageUrl: img,
+                  quantity: quantity,
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Added to cart')),
+                );
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade400),
+              child: const Text('Add to Cart'),
+            ),
+          )
+        ],
       ),
     );
   }
