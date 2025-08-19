@@ -117,38 +117,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 },
                 itemBuilder: (context, index) {
                   final item = onboardingData[index];
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      Image.asset(
-                        item['image']!,
-                        height: 300,
-                        fit: BoxFit.cover,
-                      ),
-                      const SizedBox(height: 30),
-                      Text(
-                        item['title']!,
-                        style: GoogleFonts.greatVibes(
-                          fontSize: 38,
-                          fontWeight: FontWeight.w400,
-                          color: const Color(0xFF6A1B9A),
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
+                        Image.asset(
+                          item['image']!,
+                          height: 300,
+                          fit: BoxFit.cover,
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Text(
-                          item['subtitle']!,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.dancingScript(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.black87,
+                        const SizedBox(height: 30),
+                        Text(
+                          item['title']!,
+                          style: GoogleFonts.greatVibes(
+                            fontSize: 38,
+                            fontWeight: FontWeight.w400,
+                            color: const Color(0xFF6A1B9A),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Text(
+                            item['subtitle']!,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.dancingScript(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),

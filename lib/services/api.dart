@@ -6,7 +6,7 @@ class ApiService {
   // Configurable at build time: flutter build apk/appbundle --dart-define=API_BASE_URL=https://your-domain
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://dff277d6b695.ngrok-free.app',
+    defaultValue: 'https://25909f033b2f.ngrok-free.app',
   );
 
   static Map<String, String> get _headers => {
@@ -134,7 +134,30 @@ class ApiService {
   // Normalize image URLs: if Laravel returns "/storage/...", prefix with baseUrl
   static String normalizeImageUrl(String? url) {
     if (url == null || url.isEmpty) return '';
-    if (url.startsWith('http')) return url;
+    // If absolute URL
+    if (url.startsWith('http')) {
+      try {
+        final u = Uri.parse(url);
+        final base = Uri.parse(baseUrl);
+        // If URL points to localhost/127.0.0.1 or a different origin but is a storage path, rebase to API origin
+        final isLocal = (u.host == 'localhost' || u.host == '127.0.0.1');
+        final looksLikeStorage = u.path.startsWith('/storage/') || u.path.contains('/storage/');
+        final differentOrigin = (u.scheme != base.scheme) || (u.host != base.host) || (u.hasPort && u.port != base.port);
+        if ((isLocal || differentOrigin) && looksLikeStorage) {
+          return Uri(
+            scheme: base.scheme,
+            host: base.host,
+            port: base.hasPort ? base.port : null,
+            path: u.path,
+            query: u.query,
+          ).toString();
+        }
+        return url;
+      } catch (_) {
+        return url;
+      }
+    }
+    // Relative path, prefix with API base
     if (url.startsWith('/')) return '$baseUrl$url';
     return url; // asset or other path
   }
@@ -303,6 +326,27 @@ class ApiService {
     required File file,
   }) async {
     final uri = Uri.parse('$baseUrl/api/products/$productId/image');
+    final req = http.MultipartRequest('POST', uri);
+    req.headers.addAll(_authHeaders(token));
+    req.files.add(await http.MultipartFile.fromPath('image', file.path));
+
+    final streamed = await req.send().timeout(const Duration(seconds: 30));
+    final resp = await http.Response.fromStream(streamed);
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map && data['data'] is Map) {
+      final img = (data['data'] as Map)['image_url']?.toString() ?? '';
+      return img;
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to upload image (${resp.statusCode})');
+  }
+
+  // Upload category image (auth required)
+  static Future<String> uploadCategoryImage({
+    required String token,
+    required int categoryId,
+    required File file,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/categories/$categoryId/image');
     final req = http.MultipartRequest('POST', uri);
     req.headers.addAll(_authHeaders(token));
     req.files.add(await http.MultipartFile.fromPath('image', file.path));

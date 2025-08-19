@@ -22,13 +22,10 @@ class _HomePageState extends State<HomePage>
   int? _hoveredCategoryIndex;
   bool _isImageTapped = false;
   String? _userName;
-
-  // ✅ Category Data (Display name + slug for backend)
-  final List<Map<String, String>> categories = [
-    {"name": "Men", "slug": "men", "image": "assets/images/mensuits.webp"},
-    {"name": "Women", "slug": "women", "image": "assets/images/kurti.jpeg"},
-    {"name": "Kids", "slug": "kids", "image": "assets/images/pinkgown.jpg"},
-  ];
+  
+  // Dynamic categories fetched from backend
+  List<Map<String, dynamic>> _categories = <Map<String, dynamic>>[];
+  bool _loadingCategories = false;
 
   Future<void> _onAccountTapped() async {
     final prefs = await SharedPreferences.getInstance();
@@ -42,6 +39,107 @@ class _HomePageState extends State<HomePage>
             : const LoginScreen(),
       ),
     ).then((_) => _loadUserName());
+  }
+
+  // Local placeholder mapping when backend image_url is missing
+  String? _defaultAssetForSlug(String slug) {
+    switch (slug) {
+      case 'men':
+        return 'assets/images/mensuits.webp';
+      case 'women':
+        return 'assets/images/kurti.jpeg';
+      case 'kids':
+        return 'assets/images/pinkgown.jpg';
+      default:
+        return null; // no default -> will show icon placeholder
+    }
+  }
+
+  // Builds a circular avatar for category using asset or network image with error fallback.
+  Widget _buildCategoryAvatar(String url) {
+    if (url.isEmpty) {
+      return const CircleAvatar(radius: 30, child: Icon(Icons.category));
+    }
+    if (url.startsWith('assets/')) {
+      return CircleAvatar(radius: 30, backgroundImage: AssetImage(url));
+    }
+    // For network images, use ClipOval + Image.network to get errorBuilder support
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const SizedBox(
+          width: 60,
+          height: 60,
+          child: CircleAvatar(child: Icon(Icons.broken_image)),
+        ),
+      ),
+    );
+  }
+
+  // Image on the New Arrivals card; uses first category image if available.
+  Widget _buildNewArrivalsImage() {
+    final String url = _categories.isNotEmpty
+        ? ((_categories.first['final_image'] ?? _categories.first['image_url'] ?? '').toString())
+        : '';
+    if (url.isEmpty) {
+      return Container(
+        width: 160,
+        height: 120,
+        color: Colors.white,
+        alignment: Alignment.center,
+        child: const Icon(Icons.image, color: Colors.grey),
+      );
+    }
+    if (url.startsWith('assets/')) {
+      return Image.asset(url, width: 160, height: 120, fit: BoxFit.cover);
+    }
+    return Image.network(
+      url,
+      width: 160,
+      height: 120,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(
+        width: 160,
+        height: 120,
+        color: Colors.white,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image, color: Colors.grey),
+      ),
+    );
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() => _loadingCategories = true);
+    try {
+      final list = await ApiService.getCategories(onlyRoots: true, withChildren: false);
+      // Expecting items with fields: name, slug, image_url
+      final mapped = list
+          .whereType<Map<String, dynamic>>()
+          .map((e) => {
+                'name': (e['name'] ?? '').toString(),
+                'slug': (e['slug'] ?? '').toString(),
+                'image_url': ApiService.normalizeImageUrl(e['image_url']?.toString()),
+              })
+          .where((e) => (e['name'] as String).isNotEmpty && (e['slug'] as String).isNotEmpty)
+          .map((e) {
+            final slug = (e['slug'] as String).toLowerCase();
+            final img = (e['image_url'] as String);
+            final fallback = _defaultAssetForSlug(slug);
+            return {
+              ...e,
+              if (img.isEmpty && fallback != null) 'final_image': fallback else 'final_image': img,
+            };
+          })
+          .toList();
+      if (mounted) setState(() => _categories = mapped);
+    } catch (_) {
+      if (mounted) setState(() => _categories = <Map<String, dynamic>>[]);
+    } finally {
+      if (mounted) setState(() => _loadingCategories = false);
+    }
   }
 
   void _onItemTapped(int index) {
@@ -58,6 +156,7 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
     _loadUserName();
+    _loadCategories();
   }
 
   Future<void> _loadUserName() async {
@@ -195,12 +294,12 @@ class _HomePageState extends State<HomePage>
 
             const SizedBox(height: 20),
 
-            // ✅ Categories Row (Men / Women / Kids → open CategoriesPage)
+            // ✅ Categories Row (Dynamic from backend)
             SizedBox(
               height: 110,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: categories.length,
+                itemCount: _categories.length,
                 itemBuilder: (context, index) {
                   bool isHovered = _hoveredCategoryIndex == index;
                   return GestureDetector(
@@ -209,8 +308,8 @@ class _HomePageState extends State<HomePage>
                         context,
                         MaterialPageRoute(
                           builder: (_) => CategoriesPage(
-                            categoryName: categories[index]["name"]!,
-                            categorySlug: categories[index]["slug"]!,
+                            categoryName: (_categories[index]["name"] ?? '').toString(),
+                            categorySlug: (_categories[index]["slug"] ?? '').toString(),
                           ),
                         ),
                       );
@@ -249,18 +348,15 @@ class _HomePageState extends State<HomePage>
                             AnimatedScale(
                               scale: isHovered ? 1.1 : 1.0,
                               duration: const Duration(milliseconds: 200),
-                              child: CircleAvatar(
-                                radius: 30,
-                                backgroundImage: AssetImage(
-                                  categories[index]["image"]!,
-                                ),
-                              ),
+                              child: _buildCategoryAvatar((
+                                _categories[index]['final_image'] ?? _categories[index]['image_url'] ?? ''
+                              ).toString()),
                             ),
                             const SizedBox(height: 6),
                             SizedBox(
                               width: 70,
                               child: Text(
-                                categories[index]["name"]!,
+                                (_categories[index]["name"] ?? '').toString(),
                                 textAlign: TextAlign.center,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -341,12 +437,7 @@ class _HomePageState extends State<HomePage>
                       child: AnimatedScale(
                         scale: _isImageTapped ? 1.1 : 1.0,
                         duration: const Duration(milliseconds: 150),
-                        child: Image.asset(
-                          categories[0]["image"]!,
-                          width: 160,
-                          height: 120,
-                          fit: BoxFit.cover,
-                        ),
+                        child: _buildNewArrivalsImage(),
                       ),
                     ),
                   ],

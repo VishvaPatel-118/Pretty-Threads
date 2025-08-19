@@ -182,8 +182,9 @@ class _ProductsAdminPageState extends State<ProductsAdminPage> {
       if (token == null) throw Exception('Not authenticated');
       final file = File(path);
       final url = await ApiService.uploadProductImage(token: token, productId: productId, file: file);
+      await _fetch(search: _searchCtrl.text.trim());
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image uploaded. URL: $url')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image uploaded.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -387,8 +388,15 @@ class _ProductsAdminPageState extends State<ProductsAdminPage> {
                     final price = (p['price'] ?? '').toString();
                     final stock = (p['stock'] ?? '').toString();
                     final id = (p['id'] ?? 0) as int;
+                    final imageUrl = ApiService.normalizeImageUrl(p['image_url']?.toString());
                     return ListTile(
-                      leading: const Icon(Icons.inventory_2),
+                      leading: imageUrl.isNotEmpty
+                          ? CircleAvatar(
+                              backgroundImage: imageUrl.startsWith('assets/')
+                                  ? AssetImage(imageUrl) as ImageProvider
+                                  : NetworkImage(imageUrl),
+                            )
+                          : const CircleAvatar(child: Icon(Icons.inventory_2)),
                       title: Text(name),
                       subtitle: Text('Price: $price  |  Stock: $stock'),
                       trailing: Row(
