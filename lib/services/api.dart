@@ -6,7 +6,7 @@ class ApiService {
   // Configurable at build time: flutter build apk/appbundle --dart-define=API_BASE_URL=https://your-domain
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://25909f033b2f.ngrok-free.app',
+    defaultValue: 'https://ed4a35763e8c.ngrok-free.app',
   );
 
   static Map<String, String> get _headers => {
@@ -18,6 +18,70 @@ class ApiService {
     ..._headers,
     'Authorization': 'Bearer $token',
   };
+
+  // -----------------------------
+  // User Cart (server-side)
+  // -----------------------------
+  static Future<Map<String, dynamic>> getCart({required String token}) async {
+    final uri = Uri.parse('$baseUrl/api/cart');
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch cart (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> addCartItem({
+    required String token,
+    required int productId,
+    int quantity = 1,
+    Map<String, dynamic>? attributes,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/cart/items');
+    final payload = <String, dynamic>{
+      'product_id': productId,
+      if (quantity > 0) 'quantity': quantity,
+      if (attributes != null) 'attributes': attributes,
+    };
+    final resp = await http
+        .post(uri, headers: _authHeaders(token), body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if ((resp.statusCode == 200 || resp.statusCode == 201) && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to add item (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> updateCartItem({
+    required String token,
+    required int itemId,
+    required int quantity,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/cart/items/$itemId');
+    final resp = await http
+        .put(uri, headers: _authHeaders(token), body: jsonEncode({'quantity': quantity}))
+        .timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to update item (${resp.statusCode})');
+  }
+
+  static Future<void> removeCartItem({
+    required String token,
+    required int itemId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/cart/items/$itemId');
+    final resp = await http.delete(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to remove item (${resp.statusCode})');
+  }
+
+  static Future<void> clearCart({required String token}) async {
+    final uri = Uri.parse('$baseUrl/api/cart');
+    final resp = await http.delete(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to clear cart (${resp.statusCode})');
+  }
 
   // Register user
   static Future<Map<String, dynamic>> register({
@@ -612,6 +676,45 @@ class ApiService {
     final data = _parseJson(resp);
     if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
     throw Exception(_extractErrorMessage(data) ?? 'Failed to refund payment (${resp.statusCode})');
+  }
+
+  static Future<Map<String, dynamic>> adminGetUserCart({
+    required String token,
+    required int userId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/admin/users/$userId/cart');
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map<String, dynamic>) return data;
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch user cart (${resp.statusCode})');
+  }
+
+  // ===== Favorites (authenticated) =====
+  static Future<List<Map<String, dynamic>>> getFavorites({required String token}) async {
+    final uri = Uri.parse('$baseUrl/api/favorites');
+    final resp = await http.get(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    final data = _parseJson(resp);
+    if (resp.statusCode == 200 && data is Map) {
+      final list = (data['data'] as List? ?? const []);
+      return List<Map<String, dynamic>>.from(list);
+    }
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to fetch favorites (${resp.statusCode})');
+  }
+
+  static Future<void> addFavorite({required String token, required int productId}) async {
+    final uri = Uri.parse('$baseUrl/api/favorites/$productId');
+    final resp = await http.post(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 201 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to add favorite (${resp.statusCode})');
+  }
+
+  static Future<void> removeFavorite({required String token, required int productId}) async {
+    final uri = Uri.parse('$baseUrl/api/favorites/$productId');
+    final resp = await http.delete(uri, headers: _authHeaders(token)).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200 || resp.statusCode == 204) return;
+    final data = _parseJson(resp);
+    throw Exception(_extractErrorMessage(data) ?? 'Failed to remove favorite (${resp.statusCode})');
   }
 }
 

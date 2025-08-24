@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pretty_threads/user/profile/profile_page.dart';
 import 'package:pretty_threads/services/api.dart';
 import 'package:pretty_threads/user/cart/cart_page.dart';
+import 'package:pretty_threads/user/favorites/favorites_page.dart';
+import 'package:pretty_threads/theme/app_theme.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -179,18 +181,23 @@ class _HomePageState extends State<HomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5F5),
+      appBar: AppTheme.buildAppBar('Pretty Threads'),
 
       drawer: const DrawerMenu(),
 
-      body: _buildBody(),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: AppTheme.backgroundGradient,
+        ),
+        child: _buildBody(),
+      ),
 
-      // ✅ Bottom Navigation Bar
+      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFF6A1B9A),
-        unselectedItemColor: Colors.grey,
+        backgroundColor: AppTheme.backgroundColor,
+        selectedItemColor: AppTheme.primary,
+        unselectedItemColor: AppTheme.secondaryText,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         items: const [
@@ -220,7 +227,7 @@ class _HomePageState extends State<HomePage>
       case 0:
         return _buildHomeContent();
       case 1:
-        return const Center(child: Text('Favorites coming soon'));
+        return const FavoritesPage();
       case 2:
         return const CartPage();
       default:
@@ -229,235 +236,198 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildHomeContent() {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ Top Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Builder(
-                  builder: (context) => IconButton(
-                    icon: const Icon(Icons.menu, color: Color(0xFF6A1B9A)),
-                    onPressed: () {
-                      Scaffold.of(context).openDrawer();
-                    },
-                  ),
-                ),
-                Text(
-                  _userName != null && _userName!.isNotEmpty
-                      ? "Welcome $_userName"
-                      : "Welcome",
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF6A1B9A),
-                  ),
-                ),
-                Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  padding: const EdgeInsets.all(8),
-                  child: const Icon(Icons.notifications, color: Colors.grey),
-                ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Search Bar
+          Container(
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundColor,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.shadowColor.withOpacity(0.1),
+                  blurRadius: 6,
+                )
               ],
             ),
-
-            const SizedBox(height: 16),
-
-            // ✅ Search Bar
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.purple.withOpacity(0.1),
-                    blurRadius: 6,
-                  )
-                ],
-              ),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: "Search...",
-                  prefixIcon: Icon(Icons.search, color: Colors.grey),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
-                ),
+            child: const TextField(
+              decoration: InputDecoration(
+                hintText: "Search...",
+                prefixIcon: Icon(Icons.search, color: AppTheme.secondaryText),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 12),
               ),
             ),
+          ),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-            // ✅ Categories Row (Dynamic from backend)
-            SizedBox(
-              height: 110,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  bool isHovered = _hoveredCategoryIndex == index;
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CategoriesPage(
-                            categoryName: (_categories[index]["name"] ?? '').toString(),
-                            categorySlug: (_categories[index]["slug"] ?? '').toString(),
-                          ),
+          // Categories Row (Dynamic from backend)
+          SizedBox(
+            height: 110,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _categories.length,
+              itemBuilder: (context, index) {
+                bool isHovered = _hoveredCategoryIndex == index;
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CategoriesPage(
+                          categoryName: (_categories[index]["name"] ?? '').toString(),
+                          categorySlug: (_categories[index]["slug"] ?? '').toString(),
                         ),
-                      );
+                      ),
+                    );
+                  },
+
+                  child: MouseRegion(
+                    onEnter: (_) {
+                      setState(() {
+                        _hoveredCategoryIndex = index;
+                      });
                     },
-
-                    child: MouseRegion(
-                      onEnter: (_) {
-                        setState(() {
-                          _hoveredCategoryIndex = index;
-                        });
-                      },
-                      onExit: (_) {
-                        setState(() {
-                          _hoveredCategoryIndex = null;
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.only(right: 16.0),
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: isHovered
-                              ? [
-                            BoxShadow(
-                              color: Colors.purple.withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            )
-                          ]
-                              : [],
-                        ),
-                        child: Column(
-                          children: [
-                            AnimatedScale(
-                              scale: isHovered ? 1.1 : 1.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: _buildCategoryAvatar((
-                                _categories[index]['final_image'] ?? _categories[index]['image_url'] ?? ''
-                              ).toString()),
+                    onExit: (_) {
+                      setState(() {
+                        _hoveredCategoryIndex = null;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(right: 16.0),
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.backgroundColor,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: isHovered
+                            ? [
+                          BoxShadow(
+                            color: AppTheme.shadowColor.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          )
+                        ]
+                            : [],
+                      ),
+                      child: Column(
+                        children: [
+                          AnimatedScale(
+                            scale: isHovered ? 1.1 : 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: _buildCategoryAvatar((
+                              _categories[index]['final_image'] ?? _categories[index]['image_url'] ?? ''
+                            ).toString()),
+                          ),
+                          const SizedBox(height: 6),
+                          SizedBox(
+                            width: 70,
+                            child: Text(
+                              (_categories[index]["name"] ?? '').toString(),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
                             ),
-                            const SizedBox(height: 6),
-                            SizedBox(
-                              width: 70,
-                              child: Text(
-                                (_categories[index]["name"] ?? '').toString(),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12),
-                              ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // New Arrivals Section
+          GestureDetector(
+            onTapDown: (_) {
+              setState(() {
+                _isImageTapped = true;
+              });
+            },
+            onTapUp: (_) {
+              setState(() {
+                _isImageTapped = false;
+              });
+            },
+            onTapCancel: () {
+              setState(() {
+                _isImageTapped = false;
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.accentLight, AppTheme.accent],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.shadowColor.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        "New Arrivals",
+                        style: GoogleFonts.dancingScript(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primary,
+                          shadows: const [
+                            Shadow(
+                              blurRadius: 8,
+                              color: AppTheme.shadowColor,
+                              offset: Offset(1, 1),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ✅ New Arrivals Section
-            GestureDetector(
-              onTapDown: (_) {
-                setState(() {
-                  _isImageTapped = true;
-                });
-              },
-              onTapUp: (_) {
-                setState(() {
-                  _isImageTapped = false;
-                });
-              },
-              onTapCancel: () {
-                setState(() {
-                  _isImageTapped = false;
-                });
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF3E5F5), Color(0xFFE1BEE7)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.purple.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                  ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
                     ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          "New Arrivals",
-                          style: GoogleFonts.dancingScript(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF6A1B9A),
-                            shadows: const [
-                              Shadow(
-                                blurRadius: 8,
-                                color: Colors.purpleAccent,
-                                offset: Offset(1, 1),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    child: AnimatedScale(
+                      scale: _isImageTapped ? 1.1 : 1.0,
+                      duration: const Duration(milliseconds: 150),
+                      child: _buildNewArrivalsImage(),
                     ),
-                    ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                      child: AnimatedScale(
-                        scale: _isImageTapped ? 1.1 : 1.0,
-                        duration: const Duration(milliseconds: 150),
-                        child: _buildNewArrivalsImage(),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+          ),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-            Center(
-              child: Text(
-                "Your Boutique Content Here",
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.grey[700],
-                ),
+          Center(
+            child: Text(
+              "Your Boutique Content Here",
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[700],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pretty_threads/services/api.dart';
 import 'package:pretty_threads/services/auth.dart';
+import 'package:pretty_threads/theme/app_theme.dart';
 
 class UserDetailPage extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -14,11 +15,44 @@ class _UserDetailPageState extends State<UserDetailPage> {
   bool _loading = false;
   bool _loadingPayments = false;
   List<Map<String, dynamic>> _payments = const [];
+  bool _loadingCart = false;
+  Map<String, dynamic>? _cart; // expects { data: { ...cart } } or { data: ... }
 
   @override
   void initState() {
     super.initState();
     _fetchPayments();
+    _fetchCart();
+  }
+
+  Future<void> _fetchCart() async {
+    setState(() => _loadingCart = true);
+    try {
+      final token = AuthService().token;
+      if (token == null) throw Exception('Not authenticated');
+      final id = (widget.user['id'] ?? 0) as int;
+      final res = await ApiService.adminGetUserCart(token: token, userId: id);
+      // Accept both { data: {...cart} } or direct {...cart}
+      Map<String, dynamic>? cart;
+      if (res is Map<String, dynamic>) {
+        if (res['data'] is Map<String, dynamic>) {
+          cart = Map<String, dynamic>.from(res['data'] as Map);
+        } else {
+          cart = Map<String, dynamic>.from(res);
+          // If the API returns { cart: {...} }
+          if (cart.containsKey('cart') && cart['cart'] is Map<String, dynamic>) {
+            cart = Map<String, dynamic>.from(cart['cart'] as Map);
+          }
+        }
+      }
+      if (!mounted) return;
+      setState(() => _cart = cart);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _loadingCart = false);
+    }
   }
 
   Future<void> _fetchPayments() async {
@@ -85,19 +119,20 @@ class _UserDetailPageState extends State<UserDetailPage> {
     final isBlocked = u['is_blocked'] == true;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('User Details'),
-        actions: [
-          TextButton.icon(
-            onPressed: _loading ? null : _toggleBlock,
-            icon: Icon(isBlocked ? Icons.lock_open : Icons.block),
-            label: Text(isBlocked ? 'Unblock' : 'Block'),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      appBar: AppTheme.buildAppBar('User Details', actions: [
+        TextButton.icon(
+          onPressed: _loading ? null : _toggleBlock,
+          icon: Icon(isBlocked ? Icons.lock_open : Icons.block, color: Colors.white),
+          label: Text(isBlocked ? 'Unblock' : 'Block', style: const TextStyle(color: Colors.white)),
+        ),
+      ]),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: AppTheme.backgroundGradient,
+        ),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           Row(
             children: [
               CircleAvatar(radius: 32, child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?')),
@@ -164,7 +199,52 @@ class _UserDetailPageState extends State<UserDetailPage> {
               label: const Text('Refresh payments'),
             ),
           ),
-        ],
+
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text('Cart', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (_loadingCart)
+            const Center(child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: CircularProgressIndicator(),
+            ))
+          else if (_cart == null)
+            const Text('No cart found.')
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _kv('Items', ((_cart!['total_items'] ?? 0)).toString()),
+                _kv('Total', ((_cart!['total_amount'] ?? 0)).toString()),
+                const SizedBox(height: 8),
+                if ((_cart!['items'] is List) && (_cart!['items'] as List).isNotEmpty)
+                  ...List<Widget>.from(((_cart!['items'] as List).cast<Map<String, dynamic>>()).map((it) {
+                    final p = (it['product'] as Map<String, dynamic>?) ?? const {};
+                    final title = (p['name'] ?? 'Product').toString();
+                    final qty = (it['quantity'] ?? 0).toString();
+                    final unit = (it['unit_price'] ?? 0).toString();
+                    final line = (it['line_total'] ?? 0).toString();
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.shopping_bag_outlined),
+                      title: Text(title),
+                      subtitle: Text('Qty: '+qty+'  •  Unit: '+unit+'  •  Line: '+line),
+                    );
+                  })),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _loadingCart ? null : _fetchCart,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh cart'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

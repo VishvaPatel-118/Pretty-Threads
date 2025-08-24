@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:pretty_threads/services/api.dart';
+import 'package:pretty_threads/services/favorites.dart';
 import 'package:pretty_threads/services/cart.dart';
+import 'package:pretty_threads/theme/app_theme.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final String slug;
@@ -25,11 +27,19 @@ class ProductDetailsPage extends StatefulWidget {
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
   String? mainImage;
   int quantity = 1;
+  bool _isFavorite = false;
 
   @override
   void initState() {
     super.initState();
     mainImage = widget.images.isNotEmpty ? widget.images[0] : null; // Default first image if available
+    _loadFavorite();
+  }
+
+  Future<void> _loadFavorite() async {
+    final fav = await FavoritesService().isFavorite(widget.slug);
+    if (!mounted) return;
+    setState(() => _isFavorite = fav);
   }
 
   @override
@@ -38,6 +48,31 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       appBar: AppBar(
         title: Text(widget.name),
         backgroundColor: Colors.purple.shade300,
+        actions: [
+          IconButton(
+            icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
+            onPressed: () async {
+              final img = (mainImage != null && mainImage!.isNotEmpty)
+                  ? ApiService.normalizeImageUrl(mainImage!)
+                  : (widget.images.isNotEmpty
+                      ? ApiService.normalizeImageUrl(widget.images.first)
+                      : '');
+              await FavoritesService().toggleFavorite(
+                slug: widget.slug,
+                name: widget.name,
+                price: widget.price,
+                imageUrl: img,
+              );
+              if (!mounted) return;
+              final nowFav = await FavoritesService().isFavorite(widget.slug);
+              if (!mounted) return;
+              setState(() => _isFavorite = nowFav);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(nowFav ? 'Added to favorites' : 'Removed from favorites')),
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -173,8 +208,15 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                   const SnackBar(content: Text('Added to cart')),
                 );
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade400),
-              child: const Text('Add to Cart'),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+              child: const Text(
+                'Add to Cart',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
             ),
           )
         ],
