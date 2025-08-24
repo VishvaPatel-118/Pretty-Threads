@@ -4,9 +4,44 @@ import 'package:pretty_threads/pages/about_us_page.dart';
 import 'package:pretty_threads/pages/terms_of_use_page.dart';
 import 'package:pretty_threads/pages/help_center_page.dart';
 import 'package:pretty_threads/pages/contact_us_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class DrawerMenu extends StatelessWidget {
+class DrawerMenu extends StatefulWidget {
   const DrawerMenu({super.key});
+
+  @override
+  State<DrawerMenu> createState() => _DrawerMenuState();
+}
+
+class _DrawerMenuState extends State<DrawerMenu> {
+  bool _loggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLogin();
+  }
+
+  Future<void> _checkLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    if (mounted) setState(() => _loggedIn = token != null && token.isNotEmpty);
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+    if (!mounted) return;
+    setState(() => _loggedIn = false);
+    // Redirect to Login and clear back stack
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Logged out successfully')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,18 +128,25 @@ class DrawerMenu extends StatelessWidget {
 
           const Divider(),
 
-          // Login
-          ListTile(
-            leading: const Icon(Icons.login, color: Color(0xFF6A1B9A)),
-            title: const Text("Login"),
-            onTap: () {
-              Navigator.pop(context); // Close Drawer
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              );
-            },
-          ),
+          // Login / Logout
+          _loggedIn
+              ? ListTile(
+                  leading: const Icon(Icons.logout, color: Color(0xFF6A1B9A)),
+                  title: const Text("Logout"),
+                  onTap: () => _logout(context),
+                )
+              : ListTile(
+                  leading: const Icon(Icons.login, color: Color(0xFF6A1B9A)),
+                  title: const Text("Login"),
+                  onTap: () {
+                    Navigator.pop(context); // Close Drawer
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const LoginScreen()),
+                    ).then((_) => _checkLogin());
+                  },
+                ),
         ],
       ),
     );

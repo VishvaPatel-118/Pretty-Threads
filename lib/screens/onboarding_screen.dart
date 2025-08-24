@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pretty_threads/user/authentication/login_screen.dart';
 import 'package:pretty_threads/user/home/home_page.dart'; // ✅ Home Page import
+import 'package:pretty_threads/services/auth.dart';
+import 'package:pretty_threads/admin/dashboard.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -31,12 +35,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     },
   ];
 
-  // ✅ Go to Home Page instead of Login
-  void _goToHome() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-    );
+  // ✅ Finish onboarding: decide route based on token and role (admin vs user)
+  Future<void> _finishOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    if (!mounted) return;
+    if (token == null || token.isEmpty) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+      return;
+    }
+
+    final auth = AuthService();
+    await auth.loadProfile();
+    if (!mounted) return;
+    if (auth.isAdmin) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AdminDashboard()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
+      );
+    }
   }
 
   void _nextPage() {
@@ -46,7 +71,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      _goToHome();
+      _finishOnboarding();
     }
   }
 
@@ -66,7 +91,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Padding(
                   padding: const EdgeInsets.only(top: 10, right: 16),
                   child: TextButton(
-                    onPressed: _goToHome, // ✅ Home page open
+                    onPressed: _finishOnboarding, // ✅ Decide Login or Home
                     child: const Text(
                       "Skip",
                       style: TextStyle(
@@ -92,38 +117,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 },
                 itemBuilder: (context, index) {
                   final item = onboardingData[index];
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      Image.asset(
-                        item['image']!,
-                        height: 300,
-                        fit: BoxFit.cover,
-                      ),
-                      const SizedBox(height: 30),
-                      Text(
-                        item['title']!,
-                        style: GoogleFonts.greatVibes(
-                          fontSize: 38,
-                          fontWeight: FontWeight.w400,
-                          color: const Color(0xFF6A1B9A),
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
+                        Image.asset(
+                          item['image']!,
+                          height: 300,
+                          fit: BoxFit.cover,
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Text(
-                          item['subtitle']!,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.dancingScript(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.black87,
+                        const SizedBox(height: 30),
+                        Text(
+                          item['title']!,
+                          style: GoogleFonts.greatVibes(
+                            fontSize: 38,
+                            fontWeight: FontWeight.w400,
+                            color: const Color(0xFF6A1B9A),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Text(
+                            item['subtitle']!,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.dancingScript(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),

@@ -14,7 +14,8 @@ class MyApp extends StatelessWidget {
       title: 'Pretty Threads',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.purple,
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.purple),
       ),
       home: const SplashScreen(),
     );
