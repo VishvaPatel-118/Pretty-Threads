@@ -4,6 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pretty_threads/services/api.dart';
 import 'package:pretty_threads/services/auth.dart';
 
+/// Thrown when a cart operation is attempted without being logged in.
+class LoginRequiredException implements Exception {
+  final String message;
+  const LoginRequiredException([this.message = 'Please login first']);
+  @override
+  String toString() => 'LoginRequiredException: ' + message;
+}
+
 class CartItem {
   final String slug;
   final String name;
@@ -108,23 +116,18 @@ class CartService extends ChangeNotifier {
       return;
     }
 
-    // Local fallback
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-        _items
-          ..clear()
-          ..addAll(list.map(CartItem.fromMap));
-      } catch (_) {}
-    }
+    // Guest carts are disabled: do not load any local cart for logged-out users.
+    _items.clear();
     _loaded = true;
     notifyListeners();
   }
 
   Future<void> _persist() async {
-    if (_serverBacked) return; // do not persist server cart locally (acts as cache via ensureLoaded)
+    // Do not persist when server-backed or when not logged in (guest carts disabled)
+    if (_serverBacked) return;
+    final auth = AuthService();
+    await auth.loadFromStorage();
+    if (!auth.isLoggedIn) return;
     final prefs = await SharedPreferences.getInstance();
     final data = jsonEncode(_items.map((e) => e.toMap()).toList());
     await prefs.setString(_storageKey, data);
@@ -137,85 +140,65 @@ class CartService extends ChangeNotifier {
     required String imageUrl,
     int quantity = 1,
   }) async {
+    final auth = AuthService();
+    await auth.loadFromStorage();
+    if (!auth.isLoggedIn) {
+      throw const LoginRequiredException();
+    }
     await ensureLoaded();
-    if (_serverBacked) {
-      final auth = AuthService();
-      // Need product id from slug
-      final prod = await ApiService.getProductBySlug(slug);
-      final productId = (prod['id'] as num?)?.toInt();
-      if (productId == null) return;
-      await ApiService.addCartItem(token: auth.token!, productId: productId, quantity: quantity);
-      // Refresh from server
-      _loaded = false;
-      await ensureLoaded();
-      return;
-    }
-    // Local
-    final idx = _items.indexWhere((e) => e.slug == slug);
-    if (idx >= 0) {
-      _items[idx].quantity += quantity;
-    } else {
-      _items.add(CartItem(
-        slug: slug,
-        name: name,
-        price: price,
-        imageUrl: imageUrl,
-        quantity: quantity,
-      ));
-    }
-    await _persist();
-    notifyListeners();
+    // Server-backed only (no guest cart)
+    final prod = await ApiService.getProductBySlug(slug);
+    final productId = (prod['id'] as num?)?.toInt();
+    if (productId == null) return;
+    await ApiService.addCartItem(token: auth.token!, productId: productId, quantity: quantity);
+    // Refresh from server
+    _loaded = false;
+    await ensureLoaded();
   }
 
   Future<void> updateQuantity(String slug, int quantity) async {
+    final auth = AuthService();
+    await auth.loadFromStorage();
+    if (!auth.isLoggedIn) {
+      throw const LoginRequiredException();
+    }
     await ensureLoaded();
     final idx = _items.indexWhere((e) => e.slug == slug);
     if (idx < 0) return;
-    if (_serverBacked) {
-      final item = _items[idx];
-      final itemId = item.itemId;
-      if (itemId == null) return;
-      final auth = AuthService();
-      await ApiService.updateCartItem(token: auth.token!, itemId: itemId, quantity: quantity.clamp(1, 999));
-      _loaded = false;
-      await ensureLoaded();
-      return;
-    }
-    _items[idx].quantity = quantity.clamp(1, 999);
-    await _persist();
-    notifyListeners();
+    final item = _items[idx];
+    final itemId = item.itemId;
+    if (itemId == null) return;
+    await ApiService.updateCartItem(token: auth.token!, itemId: itemId, quantity: quantity.clamp(1, 999));
+    _loaded = false;
+    await ensureLoaded();
   }
 
   Future<void> remove(String slug) async {
+    final auth = AuthService();
+    await auth.loadFromStorage();
+    if (!auth.isLoggedIn) {
+      throw const LoginRequiredException();
+    }
     await ensureLoaded();
     final idx = _items.indexWhere((e) => e.slug == slug);
     if (idx < 0) return;
-    if (_serverBacked) {
-      final itemId = _items[idx].itemId;
-      if (itemId == null) return;
-      final auth = AuthService();
-      await ApiService.removeCartItem(token: auth.token!, itemId: itemId);
-      _loaded = false;
-      await ensureLoaded();
-      return;
-    }
-    _items.removeAt(idx);
-    await _persist();
-    notifyListeners();
+    final itemId = _items[idx].itemId;
+    if (itemId == null) return;
+    await ApiService.removeCartItem(token: auth.token!, itemId: itemId);
+    _loaded = false;
+    await ensureLoaded();
   }
 
   Future<void> clear() async {
-    await ensureLoaded();
-    if (_serverBacked) {
-      final auth = AuthService();
-      await ApiService.clearCart(token: auth.token!);
-      _loaded = false;
-      await ensureLoaded();
-      return;
+    final auth = AuthService();
+    await auth.loadFromStorage();
+    if (!auth.isLoggedIn) {
+      throw const LoginRequiredException();
     }
-    _items.clear();
-    await _persist();
-    notifyListeners();
+    await ensureLoaded();
+    await ApiService.clearCart(token: auth.token!);
+    _loaded = false;
+    await ensureLoaded();
   }
 
   // Clears local cart storage and in-memory cache. Does not touch server cart.

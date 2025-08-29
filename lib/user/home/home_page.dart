@@ -25,6 +25,11 @@ class _HomePageState extends State<HomePage>
   bool _isImageTapped = false;
   String? _userName;
   
+  // Banner state
+  final PageController _bannerController = PageController(viewportFraction: 0.92);
+  int _bannerPage = 0;
+  List<String> _bannerImages = <String>[];
+  
   // Dynamic categories fetched from backend
   List<Map<String, dynamic>> _categories = <Map<String, dynamic>>[];
   bool _loadingCategories = false;
@@ -136,9 +141,37 @@ class _HomePageState extends State<HomePage>
             };
           })
           .toList();
-      if (mounted) setState(() => _categories = mapped);
+      // Prepare banners from category images or fallback assets
+      final banners = mapped
+          .map((e) => (e['final_image'] ?? e['image_url'] ?? '').toString())
+          .where((u) => u.isNotEmpty)
+          .toSet()
+          .take(5)
+          .toList();
+      if (banners.isEmpty) {
+        banners.addAll([
+          'assets/images/mensuits.webp',
+          'assets/images/kurti.jpeg',
+          'assets/images/pinkgown.jpg',
+        ]);
+      }
+      if (mounted) {
+        setState(() {
+          _categories = mapped;
+          _bannerImages = banners;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _categories = <Map<String, dynamic>>[]);
+      if (mounted) {
+        setState(() {
+          _categories = <Map<String, dynamic>>[];
+          _bannerImages = <String>[
+            'assets/images/mensuits.webp',
+            'assets/images/kurti.jpeg',
+            'assets/images/pinkgown.jpg',
+          ];
+        });
+      }
     } finally {
       if (mounted) setState(() => _loadingCategories = false);
     }
@@ -147,11 +180,38 @@ class _HomePageState extends State<HomePage>
   void _onItemTapped(int index) {
     if (index == 3) {
       _onAccountTapped();
-    } else {
-      setState(() {
-        _selectedIndex = index;
-      });
+      return;
     }
+
+    // Guard Favorites (1) and Cart (2) behind login
+    if (index == 1 || index == 2) {
+      SharedPreferences.getInstance().then((prefs) {
+        final token = prefs.getString('auth_token');
+        final loggedIn = token != null && token.isNotEmpty;
+        if (!loggedIn) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please login first')),
+            );
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          }
+          return;
+        }
+        if (mounted) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        }
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   @override
@@ -159,6 +219,12 @@ class _HomePageState extends State<HomePage>
     super.initState();
     _loadUserName();
     _loadCategories();
+  }
+
+  @override
+  void dispose() {
+    _bannerController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserName() async {
@@ -181,7 +247,15 @@ class _HomePageState extends State<HomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppTheme.buildAppBar('Pretty Threads'),
+      appBar: AppTheme.buildAppBar(
+        'Pretty Threads',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.account_circle),
+            onPressed: _onAccountTapped,
+          ),
+        ],
+      ),
 
       drawer: const DrawerMenu(),
 
@@ -264,6 +338,78 @@ class _HomePageState extends State<HomePage>
           ),
 
           const SizedBox(height: 20),
+
+          // Banners Carousel (from categories or assets)
+          if (_bannerImages.isNotEmpty) ...[
+            SizedBox(
+              height: 170,
+              child: PageView.builder(
+                controller: _bannerController,
+                itemCount: _bannerImages.length,
+                onPageChanged: (i) => setState(() => _bannerPage = i),
+                itemBuilder: (context, index) {
+                  final url = _bannerImages[index];
+                  final Widget imageWidget = url.startsWith('assets/')
+                      ? Image.asset(url, fit: BoxFit.cover)
+                      : Image.network(
+                          url,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => const Center(
+                            child: Icon(Icons.broken_image, size: 40, color: Colors.white),
+                          ),
+                        );
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          imageWidget,
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 60,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    Colors.black.withOpacity(0.4),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_bannerImages.length, (i) {
+                final active = i == _bannerPage;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: active ? 10 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: active ? AppTheme.primary : AppTheme.secondaryText.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 20),
+          ],
 
           // Categories Row (Dynamic from backend)
           SizedBox(
@@ -417,14 +563,83 @@ class _HomePageState extends State<HomePage>
           ),
 
           const SizedBox(height: 20),
+          // Features & Services section
+          Text(
+            "Features & Services",
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primaryText,
+            ),
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            // Give each tile a bit more height to avoid vertical overflow on small screens
+            childAspectRatio: 2.2,
+            children: [
+              _buildFeatureTile(Icons.cut, 'Custom Stitching', 'Tailored outfits just for you'),
+              _buildFeatureTile(Icons.local_shipping, 'Fast Delivery', 'Quick and reliable shipping'),
+              _buildFeatureTile(Icons.cached, 'Easy Returns', 'Hassle-free 7-day returns'),
+              _buildFeatureTile(Icons.lock, 'Secure Payments', 'Your data is safe with us'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-          Center(
-            child: Text(
-              "Your Boutique Content Here",
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[700],
-              ),
+  Widget _buildFeatureTile(IconData icon, String title, String subtitle) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.shadowColor.withOpacity(0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: AppTheme.primary.withOpacity(0.12),
+            child: Icon(icon, color: AppTheme.primary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.secondaryText,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],

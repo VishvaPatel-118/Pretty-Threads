@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pretty_threads/services/api.dart';
+import 'package:pretty_threads/services/auth.dart';
 import 'package:pretty_threads/services/favorites.dart';
 import 'package:pretty_threads/services/cart.dart';
 import 'package:pretty_threads/theme/app_theme.dart';
@@ -52,6 +53,15 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           IconButton(
             icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border),
             onPressed: () async {
+              final auth = AuthService();
+              await auth.loadFromStorage();
+              if (!auth.isLoggedIn) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please login first')),
+                );
+                return;
+              }
               final img = (mainImage != null && mainImage!.isNotEmpty)
                   ? ApiService.normalizeImageUrl(mainImage!)
                   : (widget.images.isNotEmpty
@@ -196,17 +206,26 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 final img = mainImage != null && mainImage!.isNotEmpty
                     ? ApiService.normalizeImageUrl(mainImage!)
                     : '';
-                await cart.addItem(
-                  slug: widget.slug,
-                  name: widget.name,
-                  price: widget.price,
-                  imageUrl: img,
-                  quantity: quantity,
-                );
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Added to cart')),
-                );
+                try {
+                  await cart.addItem(
+                    slug: widget.slug,
+                    name: widget.name,
+                    price: widget.price,
+                    imageUrl: img,
+                    quantity: quantity,
+                  );
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Added to cart')),
+                  );
+                } on LoginRequiredException {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please login first')),
+                  );
+                  // Optionally navigate to login screen here, if desired.
+                  // Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+                }
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
               child: const Text(

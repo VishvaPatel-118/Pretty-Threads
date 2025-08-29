@@ -9,6 +9,8 @@ class AppTheme {
 
   // Secondary text/icon color for unselected/disabled items
   static const Color secondaryText = Colors.grey;
+  // Primary text color for headings/content on light backgrounds
+  static const Color primaryText = Colors.black87;
 
   // Accent colors used for light decorative gradients/sections
   static const Color accent = Color(0xFFE1BEE7); // light purple
