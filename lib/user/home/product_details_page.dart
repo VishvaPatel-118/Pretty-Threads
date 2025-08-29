@@ -165,7 +165,21 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     final isAsset = normalized.startsWith('assets/');
     final imageWidget = isAsset
         ? Image.asset(normalized, fit: BoxFit.cover, width: width, height: height)
-        : Image.network(normalized, fit: BoxFit.cover, width: width, height: height);
+        : Image.network(
+            normalized,
+            fit: BoxFit.cover,
+            width: width,
+            height: height,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                width: width,
+                height: height,
+                color: Colors.grey[200],
+                alignment: Alignment.center,
+                child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+              );
+            },
+          );
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: imageWidget,

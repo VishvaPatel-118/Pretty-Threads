@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Development-only: allow cleartext (http) so the app can reach local Laravel server
+         e.g., http://10.0.2.2:8000 on emulator or http://<PC-IP>:8000 on device. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

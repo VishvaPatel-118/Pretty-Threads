@@ -15,6 +15,8 @@ class _ProductsAdminPageState extends State<ProductsAdminPage> {
   final _searchCtrl = TextEditingController();
   bool _loading = false;
   Map<String, dynamic>? _data; // expect paginator-like map
+  int _page = 1;
+  int _perPage = 20;
 
   @override
   void initState() {
@@ -191,12 +193,19 @@ class _ProductsAdminPageState extends State<ProductsAdminPage> {
     }
   }
 
-  Future<void> _fetch({String? search}) async {
+  Future<void> _fetch({String? search, int? page, int? perPage}) async {
     setState(() => _loading = true);
     try {
       final token = AuthService().token;
       if (token == null) throw Exception('Not authenticated');
-      final res = await ApiService.adminListProducts(token: token, search: search);
+      if (page != null) _page = page;
+      if (perPage != null) _perPage = perPage;
+      final res = await ApiService.adminListProducts(
+        token: token,
+        page: _page,
+        perPage: _perPage,
+        search: search,
+      );
       setState(() => _data = res);
     } catch (e) {
       if (!mounted) return;
@@ -325,11 +334,30 @@ class _ProductsAdminPageState extends State<ProductsAdminPage> {
       final name = nameCtrl.text.trim();
       final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
       final stock = int.tryParse(stockCtrl.text.trim()) ?? 0;
-      final int? categoryId = selectedChildId ?? selectedParentId; // prefer subcategory if chosen
-      final desc = descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim();
-      if (name.isEmpty || categoryId == null) {
-        throw Exception('Name and Category are required');
+      // Validate category & subcategory: if parent has children, subcategory is required
+      List<Map<String, dynamic>> selectedChildren = <Map<String, dynamic>>[];
+      if (selectedParentId != null) {
+        final parent = categories.firstWhere(
+          (e) => (e['id'] ?? -1) == selectedParentId,
+          orElse: () => <String, dynamic>{},
+        );
+        selectedChildren = (parent['children'] is List)
+            ? List<Map<String, dynamic>>.from(parent['children'])
+            : <Map<String, dynamic>>[];
       }
+
+      if (name.isEmpty) {
+        throw Exception('Name is required');
+      }
+      if (selectedParentId == null) {
+        throw Exception('Please select a category');
+      }
+      if (selectedChildren.isNotEmpty && selectedChildId == null) {
+        throw Exception('Please select a subcategory');
+      }
+
+      final int categoryId = selectedChildId ?? selectedParentId!; // require subcategory when available
+      final desc = descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim();
       await ApiService.adminCreateProduct(
         token: token,
         name: name,
@@ -368,11 +396,11 @@ class _ProductsAdminPageState extends State<ProductsAdminPage> {
                 child: TextField(
                   controller: _searchCtrl,
                   decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search products...', border: OutlineInputBorder()),
-                  onSubmitted: (v) => _fetch(search: v.trim()),
+                  onSubmitted: (v) => _fetch(search: v.trim(), page: 1),
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton(onPressed: _loading ? null : () => _fetch(search: _searchCtrl.text.trim()), child: const Text('Search')),
+              ElevatedButton(onPressed: _loading ? null : () => _fetch(search: _searchCtrl.text.trim(), page: 1), child: const Text('Search')),
               const SizedBox(width: 8),
               ElevatedButton.icon(onPressed: _loading ? null : _showCreateDialog, icon: const Icon(Icons.add), label: const Text('Add')),
             ],
@@ -440,7 +468,58 @@ class _ProductsAdminPageState extends State<ProductsAdminPage> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemCount: list.length,
                 ),
-        )
+        ),
+        // Pagination controls
+        Builder(
+          builder: (context) {
+            final d = _data;
+            int currentPage = _page;
+            int lastPage = _page;
+            int total = 0;
+            int perPage = _perPage;
+
+            if (d != null) {
+              final data = d['data'];
+              if (data is Map<String, dynamic>) {
+                currentPage = (data['current_page'] is int)
+                    ? data['current_page'] as int
+                    : int.tryParse((data['current_page'] ?? '').toString()) ?? currentPage;
+                lastPage = (data['last_page'] is int)
+                    ? data['last_page'] as int
+                    : int.tryParse((data['last_page'] ?? '').toString()) ?? lastPage;
+                total = (data['total'] is int)
+                    ? data['total'] as int
+                    : int.tryParse((data['total'] ?? '').toString()) ?? total;
+                perPage = (data['per_page'] is int)
+                    ? data['per_page'] as int
+                    : int.tryParse((data['per_page'] ?? '').toString()) ?? perPage;
+              }
+            }
+
+            final bool canPrev = currentPage > 1 && !_loading;
+            final bool canNext = currentPage < lastPage && !_loading;
+
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              child: Row(
+                children: [
+                  Text('Page $currentPage of $lastPage  •  Total: $total'),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Previous page',
+                    onPressed: canPrev ? () => _fetch(search: _searchCtrl.text.trim(), page: currentPage - 1) : null,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  IconButton(
+                    tooltip: 'Next page',
+                    onPressed: canNext ? () => _fetch(search: _searchCtrl.text.trim(), page: currentPage + 1) : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }
